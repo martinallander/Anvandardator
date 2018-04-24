@@ -4,8 +4,42 @@
 #Mathias Kindstedt
 #2018-04-13
 
-import sys, random   #Random anvands bara for att testa
+import sys, random, bluetooth   #Random anvands bara for att testa
 from PyQt4 import QtGui, QtCore
+from PyQt4.QtCore import SIGNAL
+
+class Bluetooth(QtCore.QThread):
+	def __init__(self):
+		QtCore.QThread.__init__(self)
+		#Rpi bluetooth adress
+		self.bd_addr = "98:5F:D3:35:FC:EA"		#"34:DE:1A:3D:BE:4E"
+		self.port = 15
+		self.sensorData = "Affe"
+
+	def __del__(self):
+		self.sock.close()
+		self.wait()
+
+	#def initBT(self):
+		
+
+	def run(self):
+		#Do stuff
+		self.sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
+		self.sock.connect((self.bd_addr, self.port))
+		'''btNotConnected = True
+		try:
+			while btNotConnected:
+				self.sock.connect((self.bd_addr, self.port))
+				btConnected = False
+				pass
+		except Exception as e:
+				raise e'''
+		while True:
+			#sensorData = self.sock.recv(1024)
+			self.emit(SIGNAL('updateSensor(QString)'), self.sensorData)
+			self.sock.send("esc")
+			self.sleep(2)
 
 #Klass for att skapa IR-rutorna
 class IR(QtGui.QWidget):
@@ -22,7 +56,7 @@ class IR(QtGui.QWidget):
 		#self.temp = inTemp
 		#Nedan bara for test
 		for i in range(64):
-			self.temp[i] += (random.randint(0, 10) / 10 - 0.10)
+			self.temp[i] += (random.randint(0, 10) / 10 - 0.5)
 		self.update()
 
 	#Ritar ut rutorna
@@ -155,7 +189,7 @@ class IR(QtGui.QWidget):
 		#Varje farg i ironbow motsvarar 0.1 grad mellan 10 och 53.3 grader
 		if self.temp[sq] < 10:
 			return QtGui.QColor(colorTable[0])
-		elif self.temp[sq] > 53.3:
+		elif self.temp[sq] > 53.2:
 			return QtGui.QColor(colorTable[432])
 		else:
 			return QtGui.QColor(colorTable[
@@ -199,6 +233,9 @@ class GUI(QtGui.QMainWindow):
 		super(GUI,self).__init__()
 		self.initUI()
 		self.done = 1 #Variabel for om roboten har lost sin uppgift
+		self.bluetooth = Bluetooth()
+		self.connect(self.bluetooth, SIGNAL("updateSensor(QString)"), self.updateSensor)
+		self.bluetooth.start()
 
 	def initUI(self):
 		#Huvudfonster, spacing 8 px mellan moduler
@@ -206,8 +243,8 @@ class GUI(QtGui.QMainWindow):
 		grid.setSpacing(8)
 
 		#Fonter for text och knappar, palett for kommandolistan
-		font = QtGui.QFont("Arial", 24, QtGui.QFont.Bold)
-		fontKey = QtGui.QFont("Calibri", 24, QtGui.QFont.Bold)
+		font = QtGui.QFont("Arial", 22, QtGui.QFont.Bold)
+		fontKey = QtGui.QFont("Calibri", 22, QtGui.QFont.Bold)
 		palette = QtGui.QPalette()
 		palette.setColor(QtGui.QPalette.Base, QtGui.QColor(0, 0, 0))
 		palette.setColor(QtGui.QPalette.Text, QtGui.QColor(0, 255, 0))
@@ -227,7 +264,7 @@ class GUI(QtGui.QMainWindow):
 		status = QtGui.QVBoxLayout()
 
 		#Knapp for att starta, kopplad till funktion start()
-		self.startBtn = QtGui.QPushButton("Start", self)
+		self.startBtn = QtGui.QPushButton(" Start ", self)
 		self.startBtn.setStyleSheet(
 			'QPushButton {padding:7px;background-color: #000000;color: #00FF00;}')
 		self.startBtn.setFont(font)
@@ -349,7 +386,7 @@ class GUI(QtGui.QMainWindow):
 		self.kommando = QtGui.QTextEdit()
 		self.kommando.setReadOnly(True)
 		self.kommando.setPalette(palette)
-		self.kommando.setFontPointSize(12)
+		self.kommando.setFontPointSize(10)
 		grid.addWidget(self.kommando, 0, 8, 9, 3)
 
 		### IR ###
@@ -564,6 +601,9 @@ class GUI(QtGui.QMainWindow):
 		self.gyroz.display(z)
 	def setTOF(self, d):
 		self.tofValue.display(d)
+
+	def updateSensor(self, sensorData):
+		self.setTOF(sensorData)
 
 	#Startkommando, ta bort startknapp
 	def start(self):
