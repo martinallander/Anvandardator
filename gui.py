@@ -4,7 +4,7 @@
 #Mathias Kindstedt
 #2018-04-13
 
-import sys, random, bluetooth, pickle, rospy   #Random anvands bara for att testa
+import sys, random, pickle, rospy   #Random anvands bara for att testa
 sys.path.insert(0, '../Kommodul')
 from Sensor_Data import Sensor_Data
 from PyQt4 import QtGui, QtCore
@@ -31,7 +31,7 @@ class Sub(QtCore.QThread):
 		self.styrData = pickle.loads(data)
 		self.emit(SIGNAL('updateSensor(PyQt_PyObject)'), self.styrData)
 
-
+"""
 class Bluetooth(QtCore.QThread):
 	def __init__(self):
 		QtCore.QThread.__init__(self)
@@ -66,6 +66,7 @@ class Bluetooth(QtCore.QThread):
 			self.emit(SIGNAL('updateSensor(PyQt_PyObject)'), self.sensorData)
 			self.sock.send(self.currKom)
 			self.currKom = " "
+"""
 
 #Klass for att skapa IR-rutorna
 class IR(QtGui.QWidget):
