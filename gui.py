@@ -4,7 +4,9 @@
 #Mathias Kindstedt
 #2018-04-13
 
-import sys, random, bluetooth   #Random anvands bara for att testa
+import sys, random, bluetooth, pickle   #Random anvands bara for att testa
+sys.path.insert(0, '../Kommodul')
+from Sensor_Data import Sensor_Data
 from PyQt4 import QtGui, QtCore
 from PyQt4.QtCore import SIGNAL
 
@@ -13,8 +15,8 @@ class Bluetooth(QtCore.QThread):
 		QtCore.QThread.__init__(self)
 		#Rpi bluetooth adress
 		self.bd_addr = "98:5F:D3:35:FC:EA"		#"34:DE:1A:3D:BE:4E"
-		self.port = 15
-		self.sensorData = "Affe"
+		self.port = 5
+		self.currKom = " "
 
 	def __del__(self):
 		self.sock.close()
@@ -26,20 +28,22 @@ class Bluetooth(QtCore.QThread):
 	def run(self):
 		#Do stuff
 		self.sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
-		self.sock.connect((self.bd_addr, self.port))
-		'''btNotConnected = True
+		#Vanta tills connected
+		btNotConnected = True
 		try:
 			while btNotConnected:
 				self.sock.connect((self.bd_addr, self.port))
-				btConnected = False
+				btNotConnected = False
 				pass
 		except Exception as e:
-				raise e'''
+				raise e
+		#Loopa for att hamta
 		while True:
-			#sensorData = self.sock.recv(1024)
-			self.emit(SIGNAL('updateSensor(QString)'), self.sensorData)
-			self.sock.send("esc")
-			self.sleep(2)
+			data = self.sock.recv(1024)
+			self.sensorData = pickle.loads(data)
+			self.emit(SIGNAL('updateSensor(PyQt_PyObject)'), self.sensorData)
+			self.sock.send(self.currKom)
+			self.currKom = " "
 
 #Klass for att skapa IR-rutorna
 class IR(QtGui.QWidget):
@@ -53,8 +57,13 @@ class IR(QtGui.QWidget):
 
 	#inTemp ar en array[64]
 	def setTemp(self, inTemp = 0):
-		#self.temp = inTemp
+		self.temp = inTemp
 		#Nedan bara for test
+		#for i in range(64):
+		#	self.temp[i] += (random.randint(0, 10) / 10 - 0.5)
+		self.update()
+
+	def randomTemp(self):
 		for i in range(64):
 			self.temp[i] += (random.randint(0, 10) / 10 - 0.5)
 		self.update()
@@ -187,7 +196,7 @@ class IR(QtGui.QWidget):
 		0xfffeeb,0xfffeee,0xfffef1,0xfffef4,0xfffff6]
 
 		#Varje farg i ironbow motsvarar 0.1 grad mellan 10 och 53.3 grader
-		if self.temp[sq] < 10:
+		if self.temp[sq] < 10.1:
 			return QtGui.QColor(colorTable[0])
 		elif self.temp[sq] > 53.2:
 			return QtGui.QColor(colorTable[432])
@@ -234,7 +243,8 @@ class GUI(QtGui.QMainWindow):
 		self.initUI()
 		self.done = 1 #Variabel for om roboten har lost sin uppgift
 		self.bluetooth = Bluetooth()
-		self.connect(self.bluetooth, SIGNAL("updateSensor(QString)"), self.updateSensor)
+		self.connect(self.bluetooth, SIGNAL("updateSensor(PyQt_PyObject)"), 
+			self.updateSensor)
 		self.bluetooth.start()
 
 	def initUI(self):
@@ -266,16 +276,17 @@ class GUI(QtGui.QMainWindow):
 		#Knapp for att starta, kopplad till funktion start()
 		self.startBtn = QtGui.QPushButton(" Start ", self)
 		self.startBtn.setStyleSheet(
-			'QPushButton {padding:7px;background-color: #000000;color: #00FF00;}')
+			'QPushButton {padding:6px;background-color: #000000;color: #00FF00;}')
 		self.startBtn.setFont(font)
 		self.startBtn.pressed.connect(self.start)
 
 		#Label som visar statusen pa robot, manuellt, klar etc.
-		self.statusLabel = QtGui.QLabel(' V'u"\u00E4"'ntar p'u"\u00E5"' start ', 
+		self.statusLabel = QtGui.QLabel('Redo f'u"\u00F6"'r start', 
 			self)
 		self.statusLabel.setFont(font)
 		self.statusLabel.setStyleSheet(
-			"QLabel { background-color : #00FF00; color : #000000;}");
+			"QLabel { background-color : #00FF00; color : #000000;padding:3px;}");
+		self.statusLabel.setMaximumSize(600, 62)
 
 		#Diod for att visa att nodstalld ar hittad
 		self.found = QtGui.QRadioButton('N'u"\u00F6"'dst'u"\u00E4"'lld ombord', 
@@ -292,10 +303,10 @@ class GUI(QtGui.QMainWindow):
 		self.found.setFocusPolicy(QtCore.Qt.NoFocus) #Inte klickbar med mus
 
 		#Knapp for att sla pa/av autonomt laga, kopplad till funktion setStatus()
-		self.anatom = QtGui.QCheckBox('Autonomt l'u"\u00E4"'ge', self)
-		self.anatom.setFont(font)
-		self.anatom.stateChanged.connect(self.setStatus) 
-		self.anatom.setStyleSheet(
+		self.autonom = QtGui.QCheckBox('Autonomt l'u"\u00E4"'ge', self)
+		self.autonom.setFont(font)
+		self.autonom.stateChanged.connect(self.setStatus) 
+		self.autonom.setStyleSheet(
 			'QCheckBox {spacing: 10px;}'
 			'QCheckBox::indicator {width: 24px;height: 24px;}'
 			'QCheckBox::indicator {border: 3px solid #000000;background: #808080;}'
@@ -306,12 +317,11 @@ class GUI(QtGui.QMainWindow):
 		startLayout = QtGui.QHBoxLayout()
 		startLayout.addWidget(self.startBtn)
 		startLayout.addWidget(self.statusLabel)
-		startLayout.setSpacing(20)
+		startLayout.setSpacing(15)
 		#VBox
 		status.addLayout(startLayout)
 		status.addWidget(self.found)
-		status.addWidget(self.anatom)
-		status.setSpacing(12)
+		status.addWidget(self.autonom)
 		status.setMargin(8)
 		status.setAlignment(startLayout, QtCore.Qt.AlignHCenter)
 		grid.addLayout(status, 7, 0, 2, 5)
@@ -324,57 +334,30 @@ class GUI(QtGui.QMainWindow):
 		#Skapa knappar
 		self.forwardBtn = QtGui.QPushButton(u"\u2191", self)
 		self.backwardBtn = QtGui.QPushButton(u"\u2193", self)
-		self.rightBtn = QtGui.QPushButton(u"\u2192", self)
-		self.leftBtn = QtGui.QPushButton(u"\u2190", self)
-		self.rotRightBtn = QtGui.QPushButton(u"\u2197", self)
-		self.rotLeftBtn = QtGui.QPushButton(u"\u2196", self)
+		self.rightBtn = QtGui.QPushButton(u"\u2197", self)
+		self.leftBtn = QtGui.QPushButton(u"\u2196", self)
+		self.rotRightBtn = QtGui.QPushButton(u"\u21BB", self)
+		self.rotLeftBtn = QtGui.QPushButton(u"\u21BA", self)
 
-		#Koppla till varsin on-funktion
-		self.forwardBtn.pressed.connect(self.forward)
-		self.backwardBtn.pressed.connect(self.backward)
-		self.leftBtn.pressed.connect(self.left)
-		self.rightBtn.pressed.connect(self.right)
-		self.rotLeftBtn.pressed.connect(self.rotLeft)
-		self.rotRightBtn.pressed.connect(self.rotRight)
-
-		#Koppla till varsin off-funktion
-		self.forwardBtn.released.connect(self.quitForward)
-		self.backwardBtn.released.connect(self.quitBackward)
-		self.leftBtn.released.connect(self.quitLeft)
-		self.rightBtn.released.connect(self.quitRight)
-		self.rotLeftBtn.released.connect(self.quitRotLeft)
-		self.rotRightBtn.released.connect(self.quitRotRight)
+		self.keySetup(self.forwardBtn, self.forward, self.quitForward, fontKey)
+		self.keySetup(self.backwardBtn, self.backward, self.quitBackward, fontKey)
+		self.keySetup(self.rightBtn, self.right, self.quitRight, fontKey)
+		self.keySetup(self.leftBtn, self.left, self.quitLeft, fontKey)
+		self.keySetup(self.rotLeftBtn, self.rotLeft, self.quitRotLeft, fontKey)
+		self.keySetup(self.rotRightBtn, self.rotRight, self.quitRotRight, fontKey)
 
 		#Font och form
 		self.forwardBtn.setSizePolicy(QtGui.QSizePolicy.Preferred,
 			QtGui.QSizePolicy.Expanding) # For att expandera i hojdled
-		self.forwardBtn.setStyleSheet(
-			'QPushButton {padding: 7px;background-color: #000000;color: #00FF00;}')
-		self.backwardBtn.setStyleSheet(
-			'QPushButton {padding: 7px;background-color: #000000;color: #00FF00;}')
-		self.rightBtn.setStyleSheet(
-			'QPushButton {padding: 7px;background-color: #000000;color: #00FF00;}')
-		self.leftBtn.setStyleSheet(
-			'QPushButton {padding: 7px;background-color: #000000;color: #00FF00;}')
-		self.rotRightBtn.setStyleSheet(
-			'QPushButton {padding: 7px;background-color: #000000;color: #00FF00;}')
-		self.rotLeftBtn.setStyleSheet(
-			'QPushButton {padding: 7px;background-color: #000000;color: #00FF00;}')
-		self.forwardBtn.setFont(fontKey)
-		self.backwardBtn.setFont(fontKey)
-		self.leftBtn.setFont(fontKey)
-		self.rightBtn.setFont(fontKey)
-		self.rotLeftBtn.setFont(fontKey)
-		self.rotRightBtn.setFont(fontKey)
 
 		# RL  UPP  RR
 		#  L  UPP  R
 		#     NER
-		keys.addWidget(self.rotLeftBtn, 0, 0, 1, 1)
+		keys.addWidget(self.leftBtn, 0, 0, 1, 1)
 		keys.addWidget(self.forwardBtn, 0, 1, 2, 1)
-		keys.addWidget(self.rotRightBtn, 0, 2, 1, 1)
-		keys.addWidget(self.leftBtn, 1, 0, 1, 1)
-		keys.addWidget(self.rightBtn, 1, 2, 1, 1)
+		keys.addWidget(self.rightBtn, 0, 2, 1, 1)
+		keys.addWidget(self.rotLeftBtn, 1, 0, 1, 1)
+		keys.addWidget(self.rotRightBtn, 1, 2, 1, 1)
 		keys.addWidget(self.backwardBtn, 2, 1, 1, 1)
 		grid.addLayout(keys, 7, 5, 2, 3)
 
@@ -413,17 +396,24 @@ class GUI(QtGui.QMainWindow):
 		self.gyroy = QtGui.QLCDNumber(self)
 		self.gyroz = QtGui.QLCDNumber(self)
 		self.tofValue = QtGui.QLCDNumber(7, self)
-		self.setAcc("LuL", "1337", "PR1DE")
+		self.LCDSetup(self.accx)
+		self.LCDSetup(self.accy)
+		self.LCDSetup(self.accz)
+		self.LCDSetup(self.gyrox)
+		self.LCDSetup(self.gyroy)
+		self.LCDSetup(self.gyroz)
+		self.LCDSetup(self.tofValue)
+		self.setAcc("LuL", "13.37", "PR1DE")
 		self.setGyro("'-'", "Olof", "o-d")
 		self.setTOF("Alfred")
 
 		#Skapa textpaneler och satt font
-		x = QtGui.QLabel('x: ')
-		y = QtGui.QLabel('y: ')
-		z = QtGui.QLabel('z: ')
+		x = QtGui.QLabel('x:')
+		y = QtGui.QLabel('y:')
+		z = QtGui.QLabel('z:')
 		acc = QtGui.QLabel('Acc:')
 		gyro = QtGui.QLabel('Gyro:')
-		tof = QtGui.QLabel('TOF: ')
+		tof = QtGui.QLabel('TOF:')
 		x.setFont(font)
 		y.setFont(font)
 		z.setFont(font)
@@ -450,6 +440,7 @@ class GUI(QtGui.QMainWindow):
 		sensors.addWidget(z, 5, 0)
 		sensors.addWidget(self.accz, 5, 1, 1, 2)
 		sensors.addWidget(self.gyroz, 5, 3, 1, 2)
+		sensors.setSpacing(7)
 		grid.addLayout(sensors, 5, 11, 4, 5)
 
 		### SETTINGS ###
@@ -467,6 +458,22 @@ class GUI(QtGui.QMainWindow):
 		self.setWindowTitle("CringeBOT")
 		self.setWindowIcon(QtGui.QIcon('kappa.png'))
 		self.show()
+
+	#Setup knappar
+	def keySetup(self, key, click, unclick, font):
+		key.pressed.connect(click)
+		key.released.connect(unclick)
+		key.setStyleSheet(
+			'QPushButton {padding: 7px;background-color: #000000;color: #00FF00;}')
+		key.setFont(font)
+
+
+	#Setup LCD
+	def LCDSetup(self, lcd):
+		lcd.setSmallDecimalPoint(True)
+		lcd.setStyleSheet(
+			'QLCDNumber {background-color: #000000;color: #00FF00;}')
+		lcd.setSegmentStyle(QtGui.QLCDNumber.Flat)
 
 	#Centrera fonster
 	def center(self):
@@ -490,20 +497,20 @@ class GUI(QtGui.QMainWindow):
 	def keyPressEvent(self, event):
 		if event.key() == QtCore.Qt.Key_Escape:
 			self.close()
-		elif event.key() == QtCore.Qt.Key_Q:
+		elif event.key() == QtCore.Qt.Key_A:
 			self.rotLeft()
 		elif event.key() == QtCore.Qt.Key_W:
 			self.forward()
-		elif event.key() == QtCore.Qt.Key_E:
+		elif event.key() == QtCore.Qt.Key_D:
 			self.rotRight()
-		elif event.key() == QtCore.Qt.Key_A:
+		elif event.key() == QtCore.Qt.Key_Q:
 			self.left()
 		elif event.key() == QtCore.Qt.Key_S:
 			self.backward()
-		elif event.key() == QtCore.Qt.Key_D:
+		elif event.key() == QtCore.Qt.Key_E:
 			self.right()
 		elif event.key() == QtCore.Qt.Key_I:
-			self.irGrid.setTemp()
+			self.irGrid.randomTemp()
 		elif event.key() == QtCore.Qt.Key_M:
 			self.found.toggle()
 			self.setStatus()
@@ -514,61 +521,67 @@ class GUI(QtGui.QMainWindow):
 
 	#Knappslapp
 	def keyReleaseEvent(self, event):
-		if event.key() == QtCore.Qt.Key_Q:
+		if event.key() == QtCore.Qt.Key_A:
 			self.quitRotLeft()
 		elif event.key() == QtCore.Qt.Key_W:
 			self.quitForward()
-		elif event.key() == QtCore.Qt.Key_E:
+		elif event.key() == QtCore.Qt.Key_D:
 			self.quitRotRight()
-		elif event.key() == QtCore.Qt.Key_A:
+		elif event.key() == QtCore.Qt.Key_Q:
 			self.quitLeft()
 		elif event.key() == QtCore.Qt.Key_S:
 			self.quitBackward()
-		elif event.key() == QtCore.Qt.Key_D:
+		elif event.key() == QtCore.Qt.Key_E:
 			self.quitRight()
 
 	#Uppdaterar statusfonster
 	def setStatus(self):
 		self.statusLabel.setStyleSheet(
-			"QLabel { background-color : #000000; color : #00FF00;}");
+			"QLabel { background-color : #000000; color : #00FF00;padding:3px;}");
 		if self.done == 1:
 			self.statusLabel.setStyleSheet(
-				"QLabel { background-color : #00FF00; color : #000000;}")
-			self.statusLabel.setText(' Uppdrag slutf'u"\u00F6"'rt ')
+				"QLabel {background-color:#00FF00;color:#000000;padding:3px;}")
+			self.statusLabel.setText('Uppdrag klart')
 			self.startBtn.setVisible(True)
-		elif self.anatom.checkState() == 0:
-			self.statusLabel.setText(' Manuell styrning ')
+		elif self.autonom.checkState() == 0:
+			self.statusLabel.setText('Manuell styrning')
 		elif self.found.isChecked() == True:
-			self.statusLabel.setText(' 'u"\u00C5"'terv'u"\u00E4"'nder till start ')
+			self.statusLabel.setText(''u"\u00C5"'terv'u"\u00E4"'nder till start')
 		else:
-			self.statusLabel.setText(' S'u"\u00F6"'ker efter n'
-				u"\u00F6"'dst'u"\u00E4"'lld ')
+			self.statusLabel.setText('S'u"\u00F6"'ker efter n'
+				u"\u00F6"'dst'u"\u00E4"'lld')
 
 	#Vad som hander nar ratt knapp trycks
 	def forward(self):
 		self.kommando.append(":TriHard:")
 		self.forwardBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
+		self.bluetooth.currKom = "forward"
 	def backward(self):
 		self.kommando.append(":KappaPride:")
 		self.backwardBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
+		self.bluetooth.currKom = "backward"
 	def right(self):
 		self.kommando.append(":monkaOMEGA:")
 		self.rightBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
+		self.bluetooth.currKom = "right"
 	def left(self):
 		self.kommando.append(":PogChamp:")
 		self.leftBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
+		self.bluetooth.currKom = "left"
 	def rotRight(self):
 		self.kommando.append(":greekBrow:")
 		self.rotRightBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
+		self.bluetooth.currKom = "rotRight"
 	def rotLeft(self):
 		self.kommando.append(":Kappa:")
 		self.rotLeftBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
+		self.bluetooth.currKom = "rotLeft"
 
 	#Vad som hander nar ratt knapp trycks
 	def quitForward(self):
@@ -603,7 +616,20 @@ class GUI(QtGui.QMainWindow):
 		self.tofValue.display(d)
 
 	def updateSensor(self, sensorData):
-		self.setTOF(sensorData)
+		self.setAcc(sensorData.acc[0], sensorData.acc[1], sensorData.acc[2])
+		self.setGyro(sensorData.gyro[0], sensorData.gyro[1], sensorData.gyro[2])
+		self.irGrid.setTemp(sensorData.ir)
+		self.setTOF(sensorData.tof)
+
+	#Kom = "forward" etc., Done = 1=klar/0, found 1=hittad/0, autonom=1/0=manuell 
+	def updateStyr(self, styrData):
+		if styrData.kom != "":
+			kommando.append(styrData.kom)
+		self.done = styrData.done
+		if styrData.found != self.found.isChecked():
+			self.found.toggle()
+		if styrData.autonom*2 != self.autonom.checkState():
+			self.autonom.nextCheckState()
 
 	#Startkommando, ta bort startknapp
 	def start(self):
