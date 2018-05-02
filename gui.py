@@ -4,11 +4,33 @@
 #Mathias Kindstedt
 #2018-04-13
 
-import sys, random, bluetooth, pickle   #Random anvands bara for att testa
+import sys, random, bluetooth, pickle, rospy   #Random anvands bara for att testa
 sys.path.insert(0, '../Kommodul')
 from Sensor_Data import Sensor_Data
 from PyQt4 import QtGui, QtCore
 from PyQt4.QtCore import SIGNAL
+
+class Sub(QtCore.QThread):
+	def __init__(self):
+		#Rpi bluetooth adress
+		rospy.init_node('listener', anonymous=True)
+		rospy.Subscriber("sensor", String, callbackSensor)
+		rospy.Subscriber("styr", String, callbackStyr)
+
+	def __del__(self):
+		self.wait()
+
+	def run(self):
+		rospy.spin()
+
+	def callbackSensor(data):
+		self.sensorData = pickle.loads(data)
+		self.emit(SIGNAL('updateSensor(PyQt_PyObject)'), self.sensorData)
+
+	def callbackSensor(data):
+		self.styrData = pickle.loads(data)
+		self.emit(SIGNAL('updateSensor(PyQt_PyObject)'), self.styrData)
+
 
 class Bluetooth(QtCore.QThread):
 	def __init__(self):
@@ -246,6 +268,10 @@ class GUI(QtGui.QMainWindow):
 		self.connect(self.bluetooth, SIGNAL("updateSensor(PyQt_PyObject)"), 
 			self.updateSensor)
 		self.bluetooth.start()
+		self.sub = Sub()
+		self.connect(self.sub, SIGNAL("updateSensor(PyQt_PyObject)"), 
+			self.updateSensor)
+		self.sub.start()
 
 	def initUI(self):
 		#Huvudfonster, spacing 8 px mellan moduler
