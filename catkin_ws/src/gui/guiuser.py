@@ -17,7 +17,7 @@ class SubPub(QtCore.QThread):
 		self.pub = rospy.Publisher('spi_commands', String, queue_size=1)
 		rospy.init_node('listener', anonymous=True)
 		rospy.Subscriber("sensor", Sensordata, self.callbackSensor)
-		rospy.Subscriber("styr", String, self.callbackStyr)
+		rospy.Subscriber("moves", String, self.callbackStyr)
 
 	def __del__(self):
 		pass
@@ -600,12 +600,12 @@ class GUI(QtGui.QMainWindow):
 		self.kommando.append(":monkaOMEGA:")
 		self.rightBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
-		self.subpub.publish("right")
+		self.subpub.publish("turnright")
 	def left(self):
 		self.kommando.append(":PogChamp:")
 		self.leftBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
-		self.subpub.publish("left")
+		self.subpub.publish("turnleft")
 	def rotRight(self):
 		self.kommando.append(":greekBrow:")
 		self.rotRightBtn.setStyleSheet(
@@ -647,9 +647,9 @@ class GUI(QtGui.QMainWindow):
 		self.gyroy.display(y)
 		self.gyroz.display(z)
 	def setTOF(self, d):
-		if d > 80:
-			self.tofValue.display("o.o.r.")
-		else:
+		#if d > 80:
+		#	self.tofValue.display("o.o.r.")
+		#else:
 			self.tofValue.display(d)
 
 	def updateSensor(self, sensorData):

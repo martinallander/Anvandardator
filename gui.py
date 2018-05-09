@@ -5,17 +5,19 @@
 #2018-04-13
 
 import sys, random, pickle, rospy   #Random anvands bara for att testa
-sys.path.insert(0, '../Kommodul')
-from Sensor_Data import Sensor_Data
+#sys.path.insert(0, '../Kommodul')
+#from Sensor_Data import Sensor_Data
 from PyQt4 import QtGui, QtCore
 from PyQt4.QtCore import SIGNAL
+from std_msgs.msg import String
 
-class Sub(QtCore.QThread):
+class SubPub(QtCore.QThread):
 	def __init__(self):
-		#Rpi bluetooth adress
+		QtCore.QThread.__init__(self)
+		self.pub = rospy.Publisher('chatter', String, queue_size=10)
 		rospy.init_node('listener', anonymous=True)
-		rospy.Subscriber("sensor", String, callbackSensor)
-		rospy.Subscriber("styr", String, callbackStyr)
+		rospy.Subscriber("sensor", String, self.callbackSensor)
+		rospy.Subscriber("chat", String, self.callbackStyr)
 
 	def __del__(self):
 		self.wait()
@@ -23,13 +25,17 @@ class Sub(QtCore.QThread):
 	def run(self):
 		rospy.spin()
 
-	def callbackSensor(data):
+	def callbackSensor(self, data):
 		self.sensorData = pickle.loads(data)
 		self.emit(SIGNAL('updateSensor(PyQt_PyObject)'), self.sensorData)
 
-	def callbackSensor(data):
-		self.styrData = pickle.loads(data)
-		self.emit(SIGNAL('updateSensor(PyQt_PyObject)'), self.styrData)
+	def callbackStyr(self, data):
+		rospy.loginfo(rospy.get_caller_id() + 'I heard %s', data.data)
+		self.styrData = data.data #pickle.loads(data)
+		self.emit(SIGNAL('updateStyr(PyQt_PyObject)'), self.styrData)
+
+	def publish(self, data):
+		self.pub.publish(data)
 
 """
 class Bluetooth(QtCore.QThread):
@@ -88,7 +94,7 @@ class IR(QtGui.QWidget):
 
 	def randomTemp(self):
 		for i in range(64):
-			self.temp[i] += (random.randint(0, 10) / 10 - 0.5)
+			self.temp[i] += (random.randint(0, 10) / 10.0 - 0.5)
 		self.update()
 
 	#Ritar ut rutorna
@@ -265,14 +271,16 @@ class GUI(QtGui.QMainWindow):
 		super(GUI,self).__init__()
 		self.initUI()
 		self.done = 1 #Variabel for om roboten har lost sin uppgift
-		self.bluetooth = Bluetooth()
-		self.connect(self.bluetooth, SIGNAL("updateSensor(PyQt_PyObject)"), 
+		#self.bluetooth = Bluetooth()
+		#self.connect(self.bluetooth, SIGNAL("updateSensor(PyQt_PyObject)"), 
+		#	self.updateSensor)
+		#self.bluetooth.start()
+		self.subpub = SubPub()
+		self.connect(self.subpub, SIGNAL("updateSensor(PyQt_PyObject)"), 
 			self.updateSensor)
-		self.bluetooth.start()
-		self.sub = Sub()
-		self.connect(self.sub, SIGNAL("updateSensor(PyQt_PyObject)"), 
-			self.updateSensor)
-		self.sub.start()
+		self.connect(self.subpub, SIGNAL("updateStyr(PyQt_PyObject)"), 
+			self.updateStyr)
+		self.subpub.start()
 
 	def initUI(self):
 		#Huvudfonster, spacing 8 px mellan moduler
@@ -583,32 +591,27 @@ class GUI(QtGui.QMainWindow):
 		self.kommando.append(":TriHard:")
 		self.forwardBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
-		self.bluetooth.currKom = "forward"
+		self.subpub.publish("forward")
 	def backward(self):
 		self.kommando.append(":KappaPride:")
 		self.backwardBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
-		self.bluetooth.currKom = "backward"
 	def right(self):
 		self.kommando.append(":monkaOMEGA:")
 		self.rightBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
-		self.bluetooth.currKom = "right"
 	def left(self):
 		self.kommando.append(":PogChamp:")
 		self.leftBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
-		self.bluetooth.currKom = "left"
 	def rotRight(self):
 		self.kommando.append(":greekBrow:")
 		self.rotRightBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
-		self.bluetooth.currKom = "rotRight"
 	def rotLeft(self):
 		self.kommando.append(":Kappa:")
 		self.rotLeftBtn.setStyleSheet(
 			'QPushButton {padding: 7px;background-color: #00FF00;color: #000000;}')
-		self.bluetooth.currKom = "rotLeft"
 
 	#Vad som hander nar ratt knapp trycks
 	def quitForward(self):
@@ -650,13 +653,13 @@ class GUI(QtGui.QMainWindow):
 
 	#Kom = "forward" etc., Done = 1=klar/0, found 1=hittad/0, autonom=1/0=manuell 
 	def updateStyr(self, styrData):
-		if styrData.kom != "":
-			kommando.append(styrData.kom)
-		self.done = styrData.done
-		if styrData.found != self.found.isChecked():
-			self.found.toggle()
-		if styrData.autonom*2 != self.autonom.checkState():
-			self.autonom.nextCheckState()
+		if styrData != "":
+			self.kommando.append(styrData)
+		#self.done = styrData.done
+		#if styrData.found != self.found.isChecked():
+		#	self.found.toggle()
+		#if styrData.autonom*2 != self.autonom.checkState():
+		#	self.autonom.nextCheckState()
 
 	#Startkommando, ta bort startknapp
 	def start(self):
